@@ -17,6 +17,7 @@ import {colors} from '../styles/colors';
 import {typography} from '../styles/typography';
 import {commonStyles} from '../styles/commonStyles';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
+import { SentenceGeneratorService } from '../services/sentenceGenerator';
 
 interface Message {
   id: string;
@@ -30,7 +31,8 @@ interface Message {
 interface Settings {
   wordsMode: 'study' | 'learn';
   difficulty: 'easy' | 'medium' | 'hard';
-  selectedLists: string[];
+  focusVocab: string[];
+  focusGrammar: string[];
 }
 
 const SentenceGeneratorScreen = () => {
@@ -41,7 +43,7 @@ const SentenceGeneratorScreen = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      text: 'Hello! I can help you generate Latin sentences using your vocabulary. Just tell me what kind of sentence you\'d like, or ask me to create one with specific words!',
+      text: 'Hello! I\'m powered by Claude AI and can help you generate authentic Latin sentences using your vocabulary and grammar preferences. Just tell me what kind of sentence you\'d like, or click "Compose" for a quick start!',
       isUser: false,
       timestamp: new Date(),
     }
@@ -50,7 +52,8 @@ const SentenceGeneratorScreen = () => {
   const [settings, setSettings] = useState<Settings>({
     wordsMode: 'study',
     difficulty: 'medium',
-    selectedLists: [],
+    focusVocab: [],
+    focusGrammar: [],
   });
   
   const scrollViewRef = useRef<ScrollView>(null);
@@ -95,21 +98,45 @@ const SentenceGeneratorScreen = () => {
     setMessages(prev => [...prev, userMessage, typingMessage]);
     setInputText('');
 
-    // Simulate AI response delay
-    setTimeout(() => {
-      const responses = settings.wordsMode === 'learn' ? mockLearnModeResponses : mockSentenceResponses;
-      const response = responses[Math.floor(Math.random() * responses.length)];
+    try {
+      // Call real AI service
+      const result = await SentenceGeneratorService.generateSentence({
+        wordsMode: settings.wordsMode,
+        difficulty: settings.difficulty,
+        focusVocab: settings.focusVocab,
+        focusGrammar: settings.focusGrammar,
+        customPrompt: messageText,
+      });
+
+      let responseText = '';
+      if (result.success && result.data) {
+        responseText = `**Latin:** ${result.data.sentence}\n\n**English:** ${result.data.translation}`;
+        if (result.data.explanation) {
+          responseText += `\n\n**Grammar:** ${result.data.explanation}`;
+        }
+      } else {
+        responseText = `Sorry, I encountered an error generating your sentence: ${result.error || 'Unknown error'}`;
+      }
       
       const botMessage = {
         id: (Date.now() + 2).toString(),
-        text: response,
+        text: responseText,
         isUser: false,
         timestamp: new Date(),
         hasNewWord: settings.wordsMode === 'learn',
       };
       
       setMessages(prev => prev.filter(msg => !msg.isTyping).concat(botMessage));
-    }, 1500);
+    } catch (error) {
+      const errorMessage = {
+        id: (Date.now() + 2).toString(),
+        text: 'Sorry, I\'m having trouble connecting to generate sentences right now. Please try again later.',
+        isUser: false,
+        timestamp: new Date(),
+      };
+      
+      setMessages(prev => prev.filter(msg => !msg.isTyping).concat(errorMessage));
+    }
   };
   
   // Animate screen entrance
